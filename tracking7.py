@@ -2,7 +2,8 @@ import numpy as np
 import cv2
 import globalVariables as gV
 import random
-
+import rospy 
+from geometry_msgs.msg import PoseStamped
 
 gV.selRoi = 0
 gV.top_left= [160,213]
@@ -16,6 +17,11 @@ gV.px=0
 gV.py=0
 gV.ox=0
 gV.oy=0
+gv.height=1.0
+gv.focal_length = 1.0 #RIGHT NOW RANDOM VALUE REPLACE BY THE ACTUAL ONE AFTER CALIBERATION
+
+def callback(data):
+    gv.height = data.pose.position.z
 
 def findDistance(r1,c1,r2,c2):
 	d = (r1-r2)**2 + (c1-c2)**2
@@ -51,6 +57,11 @@ def initializeTracker(cap):
 cv2.namedWindow('tracker')
 
 cap = cv2.VideoCapture(1)
+rospy.init_node('OpticalFlow', anonymous=True)
+
+rospy.Subscriber("mavros/local_position/pose", PoseStamped, callback)
+rospy.spin()
+
 while True:
     oldFrameGray = None
     old_corners = None
@@ -66,6 +77,8 @@ while True:
         #     break
 
 	#----Actual Tracking-----
+  
+
     while True:
         'Now we have oldFrame,we can get new_frame,we have old corners and we can get new corners and update accordingly'
 
@@ -120,7 +133,24 @@ while True:
         final_x = x + gV.ox;
         final_y = y + gV.oy;
 
+        actual_x = final_x*gv.height/gv.focal_length
+        actual_y = final_y*gv.height/gv.focal_length
+        temp = PoseStamped()
+        temp.pose.position.x = actual_x
+        temp.pose.position.y = actual_y
+        temp.pose.position.z = 0 
+        temp.pose.orientation.w = 1.0
+        temp.pose.orientation.x = 0.0
+        temp.pose.orientation.y = 0.0
+        temp.pose.orientation.z = 0.0
+        temp.header.stamp = rospy.Time.now()
 
+        pub = rospy.Publisher('mavros/vision_pose/pose', PoseStamped, queue_size=10)
+        rate = rospy.Rate(10)
+
+        if not rospy.is_shutdown():
+            pub.publish(temp)
+            rate.sleep()
 
         #updating old_corners and oldFrameGray
         oldFrameGray = frameGray.copy()
